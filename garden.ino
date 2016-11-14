@@ -3,8 +3,8 @@
 #include <TaskScheduler.h>
 
 char ssid[] = "ssid";          //  your network SSID (name)
-char pass[] = "passwd";      // your network password
-int keyIndex = 0;                 // your network key Index number (needed only for WEP)
+char pass[] = "password";      // your network password
+int keyIndex = 0;              // your network key Index number (needed only for WEP)
 
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
@@ -15,15 +15,17 @@ int counterHourly=0;
 
 void processHttpRequests();
 void processAutomation();
+void processWifiConnection();
 
 Task taskHttpRequests(100, TASK_FOREVER, &processHttpRequests);
 Task taskAutomation(3600000, TASK_FOREVER, &processAutomation);
+Task taskWifiConnection(7200000, TASK_FOREVER, &processWifiConnection);
 
 Scheduler runner;             // runner
 
 void setup() {
   Serial.println("Initializing...");
-  
+
   Serial.begin(115200);       // initialize serial communication
 
   pinMode(water, OUTPUT);
@@ -41,15 +43,8 @@ void setup() {
 //  }
 
   // attempt to connect to Wifi network:
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Attempting to connect to Network named: ");
-    Serial.println(ssid);                   // print the network name (SSID);
+  processWifiConnection();
 
-    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    WiFi.begin(ssid, pass);
-    // wait 10 seconds for connection:
-    delay(10000);
-  }
   server.begin();                           // start the web server on port 80
   printWifiStatus();                        // you're connected now, so print out the status
 
@@ -58,6 +53,8 @@ void setup() {
   taskHttpRequests.enable();
   runner.addTask(taskAutomation);           // adding task taskAutomation
   taskAutomation.enable();
+  runner.addTask(taskWifiConnection);     // adding task taskWifiReconnection
+  taskWifiConnection.enable();
 }
 
 
@@ -67,20 +64,28 @@ void loop() {
 
 void processAutomation() {
   if (counterHourly == 0) {
-    digitalWrite(water, LOW);               // turns the water on
-    delay(10000);
-    digitalWrite(water, HIGH);              // turns the water off
+    turnWaterOn(20000);
     counterHourly++;
   } else if (counterHourly == 23) {
     counterHourly = 0;
-  } else 
+  } else
     counterHourly++;
 
   if ((counterHourly % 2) == 0) {            // each 2 hours
-    digitalWrite(ventilator, LOW);           // turns the ventilator on
-    delay(60000);
-    digitalWrite(ventilator, HIGH);          // turns the ventilator off
+    turnVentilatorOn(120000);
   }
+}
+
+void turnWaterOn(int period) {
+  digitalWrite(water, LOW);               // turns the water on
+  delay(period);
+  digitalWrite(water, HIGH);              // turns the water off
+}
+
+void turnVentilatorOn(int period) {
+  digitalWrite(ventilator, LOW);           // turns the ventilator on
+  delay(period);
+  digitalWrite(ventilator, HIGH);          // turns the ventilator off
 }
 
 void processHttpRequests() {
@@ -105,10 +110,10 @@ void processHttpRequests() {
             client.println();
 
             // the content of the HTTP response follows the header:
-            client.print("<h1>Ochando's Garden Automation</h1>");
-            client.print("<p>Ventilator <a href=\"/ventilatorOn\"><button>ON</button></a>&nbsp;<a href=\"/ventilatorOff\"><button>OFF</button></a></p>");
+            client.print("<h1 style=\"font-size:600&#37;\">Ochando's Garden Automation</h1>");
+            client.print("`<p style=\"font-size:500&#37;\">Ventilator <a href=\"/ventilatorOn\"><button style=\"font-size:50&#37;\">ON</button></a>&nbsp;<a href=\"/ventilatorOff\"><button style=\"font-size:50&#37;\">OFF</button></a></p>`");
             client.print("<br>");
-            client.print("<p>Water <a href=\"/waterOn\"><button>ON</button></a>&nbsp;<a href=\"/waterOff\"><button>OFF</button></a></p>");
+            client.print("<p style=\"font-size:500&#37;\">Water <a href=\"/waterOn\"><button style=\"font-size:50&#37;\">ON</button></a>&nbsp;<a href=\"/waterOff\"><button style=\"font-size:50&#37;\">OFF</button></a></p>");
 
             // The HTTP response ends with another blank line:
             client.println();
@@ -121,7 +126,7 @@ void processHttpRequests() {
           currentLine += c;      // add it to the end of the currentLine
         }
 
-        // Check to see if the client request 
+        // Check to see if the client request
         if (currentLine.endsWith("GET /ventilatorOn")) {
           digitalWrite(ventilator, LOW);               // GET /ventilatorOn turns the ventilator on
         }
@@ -139,6 +144,19 @@ void processHttpRequests() {
     // close the connection:
     client.stop();
     Serial.println("client disonnected");
+  }
+}
+
+void processWifiConnection() {
+  // checking connection:
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Connection was lost. Attempting to connect to Network named: ");
+    Serial.println(ssid);                   // print the network name (SSID);
+
+    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+    WiFi.begin(ssid, pass);
+    // wait 10 seconds for connection:
+    delay(10000);
   }
 }
 
